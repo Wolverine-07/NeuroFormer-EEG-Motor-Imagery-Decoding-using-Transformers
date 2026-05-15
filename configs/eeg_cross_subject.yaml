@@ -1,0 +1,42 @@
+# Cross-subject evaluation configuration
+# Train on N-1 subjects, test on held-out subject (5-fold over subjects)
+
+data:
+  data_dir: "./data/physionet"
+  subjects: null
+  tmin: 0.0
+  tmax: 4.0
+  bandpass: [4.0, 40.0]
+  resample_freq: 128.0
+  n_folds: 5
+
+model:
+  name: "eeg_transformer"
+  n_channels: 64
+  n_classes: 4
+  d_model: 128
+  num_heads: 4
+  d_ff: 256
+  num_layers: 4
+  dropout: 0.4  # higher dropout for cross-subject (more regularization needed)
+  temporal_filters: 16
+  temporal_kernel: 64
+  patch_size: 16
+
+training:
+  batch_size: 64
+  num_epochs: 50
+  learning_rate: 0.0003
+  weight_decay: 0.02
+  warmup_epochs: 3
+  patience: 10
+  seed: 42
+
+augmentation:
+  enabled: true
+  noise_std: 0.15
+  noise_prob: 0.6
+  time_shift_max: 10
+  time_shift_prob: 0.4
+  channel_dropout_prob: 0.08
+  scale_range: [0.8, 1.2]
