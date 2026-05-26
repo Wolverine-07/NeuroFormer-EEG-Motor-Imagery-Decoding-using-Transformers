@@ -1,4 +1,4 @@
-# 🧠 NeuroFormer
+# NeuroFormer
 
 **Transformer from Scratch → EEG Brain-Computer Interface Decoding**
 
@@ -15,12 +15,12 @@ NeuroFormer is a comprehensive project that implements the original Transformer 
 Transformers are dominating NLP and Vision, but applying them to raw, continuous, multi-channel neural data (like EEG) requires specific adaptations. This project demonstrates how to bridge the gap between deep learning architectures and neuroscience.
 
 **Key Features:**
-- ✅ **Pure PyTorch Implementation**: Faithful to the original "Attention Is All You Need" paper.
-- ✅ **CNN-Transformer Hybrid**: Adapts the Transformer to EEG data using a CNN patch-tokenizer.
-- ✅ **PhysioNet EEG Dataset**: Full MNE-based pipeline for loading and preprocessing real human brain data.
-- ✅ **Scientific Rigor**: Includes baselines (EEGNet), cross-subject evaluation, and statistical tests.
-- ✅ **Interpretability**: Tools to extract and visualize topographic attention maps on the scalp.
-- ✅ **Production Ready**: W&B tracking, mixed precision (AMP), comprehensive unit tests, and a Gradio demo.
+- **Pure PyTorch Implementation**: Faithful to the original "Attention Is All You Need" paper.
+- **CNN-Transformer Hybrid**: Adapts the Transformer to EEG data using a CNN patch-tokenizer.
+- **PhysioNet EEG Dataset**: Full MNE-based pipeline for loading and preprocessing real human brain data.
+- **Scientific Rigor**: Includes baselines (EEGNet), cross-subject evaluation, and statistical tests.
+- **Interpretability**: Tools to extract and visualize topographic attention maps on the scalp.
+- **Production Ready**: W&B tracking, mixed precision (AMP), comprehensive unit tests, and a Gradio demo.
 
 ![NeuroFormer Architecture](assets/architecture.png)
 
