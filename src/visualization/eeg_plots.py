@@ -114,7 +114,7 @@ def plot_class_averaged_signals(
                 alpha=0.15, color=colors[cls_idx],
             )
 
-        ch_label = channel_names[ch] if channel_names else f"Channel {ch}"
+        ch_label = channel_names[ch_idx] if channel_names else f"Channel {ch}"
         axes[ch_idx].set_ylabel(ch_label, fontsize=10)
         axes[ch_idx].legend(fontsize=8, loc="upper right")
         axes[ch_idx].grid(True, alpha=0.2)
@@ -170,6 +170,152 @@ def plot_psd_comparison(
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved: {save_path}")
+    plt.close()
+
+def plot_topographic_map(
+    values: np.ndarray,
+    channel_names: List[str],
+    channel_positions: Optional[np.ndarray] = None,
+    title: str = "Topographic Map",
+    cmap: str = "viridis",
+    save_path: Optional[str] = None,
+):
+    """
+    Plot a topographic map of values (e.g. attention weights or activations) 
+    over the scalp.
+
+    If channel_positions are not provided, an approximate 10-20 system 
+    layout will be generated for standard channel names.
+
+    Args:
+        values: (n_channels,) Array of values to plot
+        channel_names: List of channel name strings
+        channel_positions: (n_channels, 2) Array of 2D coordinates.
+        title: Plot title
+        cmap: Colormap to use
+        save_path: Optional save path
+    """
+    # MNE is highly recommended for real topomaps, but here's a fallback
+    # scatter plot implementation for our custom visualizations
+    
+    # Simple approx positions for some standard channels (x, y)
+    standard_pos = {
+        'Fp1': (-0.3, 0.4), 'Fp2': (0.3, 0.4),
+        'F3': (-0.3, 0.2), 'F4': (0.3, 0.2),
+        'C3': (-0.3, 0.0), 'C4': (0.3, 0.0),
+        'P3': (-0.3, -0.2), 'P4': (0.3, -0.2),
+        'O1': (-0.3, -0.4), 'O2': (0.3, -0.4),
+        'Fz': (0.0, 0.2), 'Cz': (0.0, 0.0), 'Pz': (0.0, -0.2),
+    }
+
+    if channel_positions is None:
+        # Try to use standard positions, otherwise random circle
+        pos = []
+        for i, ch in enumerate(channel_names):
+            if ch in standard_pos:
+                pos.append(standard_pos[ch])
+            else:
+                angle = i * (2 * np.pi / len(channel_names))
+                pos.append((0.4 * np.cos(angle), 0.4 * np.sin(angle)))
+        channel_positions = np.array(pos)
+
+    fig, ax = plt.subplots(figsize=(6, 5))
+    
+    # Draw "head" outline
+    head = plt.Circle((0, 0), 0.5, color='black', fill=False, linewidth=2)
+    ax.add_artist(head)
+    
+    # Draw "nose"
+    nose_x = [ -0.05, 0.0, 0.05 ]
+    nose_y = [ 0.48, 0.55, 0.48 ]
+    ax.plot(nose_x, nose_y, color='black', linewidth=2)
+    
+    # Draw "ears"
+    ax.add_artist(plt.Circle((-0.51, 0), 0.05, color='black', fill=False, linewidth=1.5))
+    ax.add_artist(plt.Circle((0.51, 0), 0.05, color='black', fill=False, linewidth=1.5))
+
+    # Scatter plot for values
+    sc = ax.scatter(
+        channel_positions[:, 0], 
+        channel_positions[:, 1], 
+        c=values, 
+        cmap=cmap, 
+        s=200, 
+        edgecolor='black',
+        zorder=3
+    )
+
+    # Add channel labels
+    for i, txt in enumerate(channel_names):
+        ax.annotate(
+            txt, 
+            (channel_positions[i, 0], channel_positions[i, 1]), 
+            ha='center', va='center', 
+            fontsize=8,
+            color='white' if values[i] < np.mean(values) else 'black',
+            zorder=4
+        )
+
+    ax.set_xlim(-0.6, 0.6)
+    ax.set_ylim(-0.6, 0.6)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    
+    cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Value', rotation=270, labelpad=15)
+    
+    plt.title(title)
+    
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"Saved: {save_path}")
+    plt.close()
+
+
+def plot_channel_importance(
+    importance_scores: np.ndarray,
+    channel_names: List[str],
+    top_k: int = 20,
+    title: str = "Channel Importance",
+    save_path: Optional[str] = None,
+):
+    """
+    Plot a bar chart of channel importance scores.
+
+    Args:
+        importance_scores: (n_channels,) Array of importance scores
+        channel_names: List of channel name strings
+        top_k: Number of top channels to display (default 20)
+        title: Plot title
+        save_path: Optional save path
+    """
+    # Sort indices by descending score
+    sorted_idx = np.argsort(importance_scores)[::-1]
+    
+    # Get top k
+    top_idx = sorted_idx[:top_k]
+    top_scores = importance_scores[top_idx]
+    top_names = [channel_names[i] for i in top_idx]
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Horizontal bar chart (highest at top)
+    y_pos = np.arange(len(top_names))
+    ax.barh(y_pos, top_scores, align='center', color='steelblue')
+    
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(top_names)
+    ax.invert_yaxis()  # labels read top-to-bottom
+    
+    ax.set_xlabel('Importance Score')
+    ax.set_title(title)
+    ax.grid(axis='x', linestyle='--', alpha=0.7)
+    
+    plt.tight_layout()
+    
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"Saved: {save_path}")

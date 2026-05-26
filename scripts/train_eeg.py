@@ -27,6 +27,14 @@ import time
 import json
 from pathlib import Path
 
+# Optional wandb import
+try:
+    import wandb as _wandb
+    _WANDB_AVAILABLE = True
+except ImportError:
+    _wandb = None
+    _WANDB_AVAILABLE = False
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
@@ -399,6 +407,10 @@ def main():
     parser.add_argument("--subjects", nargs="+", type=int, default=None,
                         help="Specific subject IDs to use (for quick tests)")
     parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--wandb", action="store_true", default=False,
+                        help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb-project", type=str, default="neuroformer",
+                        help="W&B project name (default: 'neuroformer')")
     args = parser.parse_args()
 
     # Load config
@@ -422,6 +434,19 @@ def main():
     np.random.seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
+
+    # Initialize W&B if enabled
+    if args.wandb:
+        if not _WANDB_AVAILABLE:
+            print("Warning: --wandb flag set but wandb is not installed. Skipping.")
+        else:
+            _wandb.init(
+                project=args.wandb_project,
+                config=config,
+                name=f"{config['model']['name']}_{args.mode}",
+                tags=[args.mode, config["model"]["name"]],
+            )
+            print(f"W&B run initialized: project={args.wandb_project}")
 
     # Run
     start_time = time.time()
@@ -461,6 +486,36 @@ def main():
     with open(results_file, "w") as f:
         json.dump(serializable, f, indent=2)
     print(f"Results saved to {results_file}")
+
+    # Log final results to W&B and finish
+    if args.wandb and _WANDB_AVAILABLE and _wandb.run is not None:
+        # Compute aggregate metrics
+        if isinstance(results, dict):
+            accs = [v["accuracy"] for v in results.values()]
+            f1s = [v["f1_macro"] for v in results.values()]
+            kappas = [v["cohen_kappa"] for v in results.values()]
+        else:
+            accs = [v["accuracy"] for v in results]
+            f1s = [v["f1_macro"] for v in results]
+            kappas = [v["cohen_kappa"] for v in results]
+
+        _wandb.log({
+            "final/mean_accuracy": float(np.mean(accs)),
+            "final/std_accuracy": float(np.std(accs)),
+            "final/mean_f1_macro": float(np.mean(f1s)),
+            "final/std_f1_macro": float(np.std(f1s)),
+            "final/mean_cohen_kappa": float(np.mean(kappas)),
+            "final/std_cohen_kappa": float(np.std(kappas)),
+            "final/total_time_minutes": elapsed / 60.0,
+        })
+
+        # Save results file as W&B artifact
+        artifact = _wandb.Artifact(name="results", type="results")
+        artifact.add_file(str(results_file))
+        _wandb.log_artifact(artifact)
+
+        _wandb.finish()
+        print("W&B run finished.")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ Provides a clean, reusable training loop with:
   - Training/validation split
   - Logging and progress tracking
   - Greedy decoding for inference
+  - Optional Weights & Biases (wandb) integration
+  - Optional Automatic Mixed Precision (AMP) training
 
 Based on the training procedure described in Section 5 of the paper.
 """
@@ -17,6 +19,14 @@ from typing import Optional, Callable
 import torch
 import torch.nn as nn
 from tqdm import tqdm
+
+# Optional wandb import
+try:
+    import wandb
+    _WANDB_AVAILABLE = True
+except ImportError:
+    wandb = None
+    _WANDB_AVAILABLE = False
 
 from src.training.scheduler import NoamScheduler
 from src.training.metrics import compute_sequence_accuracy
@@ -40,6 +50,9 @@ class Trainer:
         scheduler: LR scheduler (typically NoamScheduler)
         device: Device to train on (cpu/cuda)
         grad_accum_steps: Number of steps to accumulate gradients
+        use_wandb: Enable Weights & Biases logging (requires wandb installed)
+        wandb_project: W&B project name (used only if use_wandb=True)
+        use_amp: Enable Automatic Mixed Precision (only on CUDA devices)
     """
 
     def __init__(
@@ -50,6 +63,9 @@ class Trainer:
         scheduler: Optional[NoamScheduler] = None,
         device: torch.device = None,
         grad_accum_steps: int = 1,
+        use_wandb: bool = False,
+        wandb_project: str = "neuroformer",
+        use_amp: bool = False,
     ):
         self.model = model
         self.criterion = criterion
@@ -58,11 +74,26 @@ class Trainer:
         self.device = device or torch.device("cpu")
         self.grad_accum_steps = grad_accum_steps
 
+        # --- W&B integration ---
+        self.use_wandb = use_wandb and _WANDB_AVAILABLE
+        self.wandb_project = wandb_project
+        if use_wandb and not _WANDB_AVAILABLE:
+            print("Warning: wandb requested but not installed. Skipping W&B logging.")
+
+        # --- AMP (Mixed Precision) ---
+        self.use_amp = use_amp and self.device.type == "cuda"
+        self.scaler = torch.amp.GradScaler("cuda") if self.use_amp else None
+        if use_amp and self.device.type != "cuda":
+            print("Warning: AMP requested but device is not CUDA. Disabling AMP.")
+
         self.model.to(self.device)
 
         # Training history
         self.train_losses = []
         self.val_losses = []
+
+        # Global step counter for wandb logging
+        self._global_step = 0
 
     def train_epoch(
         self,
@@ -97,35 +128,58 @@ class Trainer:
             tgt_input = tgt[:, :-1]
             tgt_output = tgt[:, 1:]
 
-            # Forward pass
-            logits = self.model(src, tgt_input)
+            # Forward pass (optionally with AMP autocast)
+            if self.use_amp:
+                with torch.amp.autocast("cuda"):
+                    logits = self.model(src, tgt_input)
+                    loss = self.criterion(logits, tgt_output)
+            else:
+                logits = self.model(src, tgt_input)
+                loss = self.criterion(logits, tgt_output)
 
-            # Compute loss
-            loss = self.criterion(logits, tgt_output)
             loss = loss / self.grad_accum_steps
 
-            # Backward pass
-            loss.backward()
+            # Backward pass (scaled if AMP)
+            if self.use_amp:
+                self.scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
             # Gradient accumulation
             if (i + 1) % self.grad_accum_steps == 0:
-                # Gradient clipping (helps with training stability)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                if self.use_amp:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    # Gradient clipping (helps with training stability)
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    self.optimizer.step()
 
-                self.optimizer.step()
                 self.optimizer.zero_grad()
 
                 if self.scheduler is not None:
                     self.scheduler.step()
 
-            total_loss += loss.item() * self.grad_accum_steps
+            step_loss = loss.item() * self.grad_accum_steps
+            total_loss += step_loss
             total_tokens += 1
+            self._global_step += 1
 
-            # Log
+            # Per-step W&B logging
+            lr = self.scheduler.get_lr() if self.scheduler else self.optimizer.param_groups[0]["lr"]
+            if self.use_wandb:
+                wandb.log({
+                    "train/step_loss": step_loss,
+                    "train/learning_rate": lr,
+                    "global_step": self._global_step,
+                })
+
+            # Console log
             if (i + 1) % log_interval == 0:
                 avg_loss = total_loss / total_tokens
                 elapsed = time.time() - start_time
-                lr = self.scheduler.get_lr() if self.scheduler else self.optimizer.param_groups[0]["lr"]
                 print(
                     f"  Step {i+1} | Loss: {avg_loss:.4f} | "
                     f"LR: {lr:.6f} | Time: {elapsed:.1f}s"
@@ -185,6 +239,10 @@ class Trainer:
         """
         print(f"Training on {self.device}")
         print(f"Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
+        if self.use_amp:
+            print("AMP (Mixed Precision): enabled")
+        if self.use_wandb:
+            print(f"W&B logging: enabled (project={self.wandb_project})")
         print("-" * 60)
 
         for epoch in range(1, num_epochs + 1):
@@ -198,8 +256,40 @@ class Trainer:
                 val_loss = self.evaluate(val_iter_fn())
                 msg += f" | Val Loss: {val_loss:.4f}"
 
+                # W&B epoch-level logging
+                if self.use_wandb:
+                    wandb.log({
+                        "epoch": epoch,
+                        "train/epoch_loss": train_loss,
+                        "val/epoch_loss": val_loss,
+                    })
+            else:
+                if self.use_wandb:
+                    wandb.log({
+                        "epoch": epoch,
+                        "train/epoch_loss": train_loss,
+                    })
+
             print(msg)
             print("-" * 60)
+
+        # Log model as W&B artifact
+        if self.use_wandb:
+            try:
+                artifact = wandb.Artifact(
+                    name="trained-model",
+                    type="model",
+                    description="Transformer model checkpoint",
+                )
+                import tempfile, os
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    ckpt_path = os.path.join(tmpdir, "model.pt")
+                    torch.save(self.model.state_dict(), ckpt_path)
+                    artifact.add_file(ckpt_path)
+                    wandb.log_artifact(artifact)
+                print("Model logged as W&B artifact.")
+            except Exception as e:
+                print(f"Warning: Failed to log model artifact to W&B: {e}")
 
 
 def greedy_decode(

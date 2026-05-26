@@ -1,0 +1,22 @@
+# Base Transformer configuration matching "Attention Is All You Need" paper
+
+model:
+  name: "transformer_base"
+  d_model: 512
+  num_heads: 8
+  num_layers: 6
+  d_ff: 2048
+  dropout: 0.1
+
+training:
+  batch_size: 64
+  num_epochs: 10
+  learning_rate: 0.0001
+  warmup_steps: 4000
+  label_smoothing: 0.1
+  optimizer:
+    name: "adam"
+    beta1: 0.9
+    beta2: 0.98
+    eps: 1e-9
+  seed: 42

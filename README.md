@@ -2,194 +2,198 @@
 
 **Transformer from Scratch → EEG Brain-Computer Interface Decoding**
 
-A faithful PyTorch implementation of *"Attention Is All You Need"* (Vaswani et al., 2017), applied to EEG-based motor imagery classification for Brain-Computer Interfaces.
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Paper](https://img.shields.io/badge/Paper-Attention%20Is%20All%20You%20Need-green)](https://arxiv.org/abs/1706.03762)
 
----
+## 1. Overview
 
-## Overview
+NeuroFormer is a comprehensive project that implements the original Transformer architecture from scratch in PyTorch, and then adapts it for a cutting-edge Brain-Computer Interface (BCI) task: **EEG Motor Imagery Decoding**.
 
-This project implements the Transformer architecture **entirely from scratch** in PyTorch — no `nn.Transformer`, no HuggingFace — and then applies it to decode motor imagery from EEG brain signals using the [PhysioNet Motor Movement/Imagery Dataset](https://physionet.org/content/eegmmidb/1.0.0/).
+**Why this matters:**
+Transformers are dominating NLP and Vision, but applying them to raw, continuous, multi-channel neural data (like EEG) requires specific adaptations. This project demonstrates how to bridge the gap between deep learning architectures and neuroscience.
 
-The core idea: if someone imagines moving their left hand vs right hand, their brain produces distinguishable patterns in the EEG signal. The Transformer's self-attention mechanism can learn to identify these patterns by attending to the most informative time segments and spatial electrode combinations.
+**Key Features:**
+- ✅ **Pure PyTorch Implementation**: Faithful to the original "Attention Is All You Need" paper.
+- ✅ **CNN-Transformer Hybrid**: Adapts the Transformer to EEG data using a CNN patch-tokenizer.
+- ✅ **PhysioNet EEG Dataset**: Full MNE-based pipeline for loading and preprocessing real human brain data.
+- ✅ **Scientific Rigor**: Includes baselines (EEGNet), cross-subject evaluation, and statistical tests.
+- ✅ **Interpretability**: Tools to extract and visualize topographic attention maps on the scalp.
+- ✅ **Production Ready**: W&B tracking, mixed precision (AMP), comprehensive unit tests, and a Gradio demo.
 
-### Architecture
+![NeuroFormer Architecture](assets/architecture.png)
 
-```
-Raw EEG (64 channels × ~4s at 128 Hz)
-  → CNN Tokenizer (temporal + spatial convolutions)
-  → Patch Embedding → sequence of tokens
-  → [CLS] token + Learnable Positional Encoding
-  → Transformer Encoder (4 layers, 4 heads, d_model=128)
-  → [CLS] output → Classification Head
-  → 4-class prediction (left fist, right fist, both fists, both feet)
-```
+## 2. Architecture
 
-**Why CNN + Transformer?** Raw EEG isn't discrete tokens — the CNN extracts local time-frequency features (like learned bandpass filters) and spatial patterns (like Common Spatial Pattern), converting continuous signals into a token sequence the Transformer can process. The Transformer then models long-range temporal dependencies across these features.
+The project is developed in three phases:
 
----
+1. **Phase 1: Pure Transformer**
+   A structurally exact implementation of the Vaswani et al. (2017) architecture. Includes multi-head scaled dot-product attention, positional encoding, and Noam learning rate scheduling.
 
-## Project Structure
+2. **Phase 2: EEG Data Pipeline**
+   A robust, MNE-powered pipeline for downloading the PhysioNet Motor Movement/Imagery dataset, bandpass filtering (4-40Hz to capture $\mu$ and $\beta$ rhythms), epoching, and normalizing the data.
 
-```
+3. **Phase 3: EEG-Transformer Hybrid**
+   Raw EEG is continuous and spatially structured. We use a **CNN Tokenizer** (temporal and spatial depthwise convolutions) to extract local features, which are then flattened into "patches" and fed to the **Transformer Encoder**. A Classification Head outputs probabilities for 4 motor imagery classes (Left Hand, Right Hand, Both Hands, Both Feet).
+
+## 3. Project Structure
+
+```text
 neuroformer/
+├── README.md
+├── pyproject.toml
+├── requirements.txt
+├── assets/
+│   └── architecture.png
+├── configs/                     # YAML configuration files
+│   ├── transformer_base.yaml
+│   ├── eeg_subject_dependent.yaml
+│   └── eeg_cross_subject.yaml
+├── data/                        # Downloaded PhysioNet EEG data
+├── notebooks/                   # Educational Jupyter notebooks
+│   ├── 01_transformer_walkthrough.ipynb
+│   ├── 02_eeg_data_exploration.ipynb
+│   ├── 03_training_analysis.ipynb
+│   └── 04_attention_visualization.ipynb
+├── scripts/                     # Runnable scripts
+│   ├── train_translation.py     # Copy-task verification
+│   ├── train_eeg.py             # Main training script
+│   ├── run_evaluation.py        # Evaluation and plotting
+│   └── demo.py                  # Gradio web interface
 ├── src/
-│   ├── transformer/          # Transformer from scratch (Paper Sections 3.1-3.5)
-│   │   ├── attention.py      # Scaled dot-product & multi-head attention
-│   │   ├── encoder.py        # Encoder layer + stack
-│   │   ├── decoder.py        # Decoder layer + stack (for seq2seq tasks)
-│   │   ├── embeddings.py     # Token embeddings + sinusoidal positional encoding
-│   │   ├── feed_forward.py   # Position-wise feed-forward network
-│   │   ├── transformer.py    # Full encoder-decoder model
-│   │   └── utils.py          # Masking, LayerNorm, residual connections
-│   │
-│   ├── eeg/                  # EEG data pipeline
-│   │   ├── dataset.py        # PhysioNet data loading & splitting
-│   │   ├── preprocessing.py  # PSD, band power, signal quality
-│   │   ├── tokenizer.py      # CNN-based EEG → token conversion
-│   │   └── augmentation.py   # Noise, time-shift, channel dropout
-│   │
-│   ├── models/               # Application models
-│   │   ├── eeg_transformer.py  # CNN-Transformer hybrid classifier
-│   │   └── baselines.py        # EEGNet baseline for comparison
-│   │
-│   ├── training/             # Training infrastructure
-│   │   ├── trainer.py        # Training loop + greedy decode
-│   │   ├── scheduler.py      # Noam LR scheduler (Paper Section 5.3)
-│   │   ├── losses.py         # Label smoothing (Paper Section 5.4)
-│   │   └── metrics.py        # Accuracy, F1, Cohen's κ
-│   │
-│   └── visualization/        # Analysis & plots
-│       ├── attention_maps.py     # Attention weight heatmaps
-│       ├── training_curves.py    # Loss/accuracy curves, confusion matrices
-│       └── eeg_plots.py          # EEG signals, PSD, class-averaged ERPs
-│
-├── configs/                  # YAML experiment configs
-├── scripts/
-│   ├── train_translation.py  # Transformer validation (copy task)
-│   ├── train_eeg.py          # Main EEG training script
-│   └── demo.py               # Interactive Gradio demo
-│
-├── tests/                    # Unit tests (44 tests)
-└── notebooks/                # Jupyter exploration notebooks
+│   ├── transformer/             # Pure Transformer implementation
+│   ├── eeg/                     # EEG dataset & preprocessing (MNE)
+│   ├── models/                  # EEG-Transformer & EEGNet baseline
+│   ├── training/                # Training loop, scheduler, metrics
+│   └── visualization/           # Attention maps & EEG plotting
+└── tests/                       # Unit tests (pytest)
 ```
 
----
+## 4. Installation
 
-## Getting Started
-
-### Installation
+**Prerequisites:** Python 3.8+ and pip. A CUDA-compatible GPU is recommended but not strictly required.
 
 ```bash
+# Clone the repository
 git clone https://github.com/Wolverine-07/NeuroFormer-EEG-Motor-Imagery-Decoding-using-Transformers.git
 cd NeuroFormer-EEG-Motor-Imagery-Decoding-using-Transformers
 
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# Create and activate a virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install dependencies
-pip install -e ".[all]"
-# or
-pip install -r requirements.txt
+# Install the package and all dependencies
+pip install -e .[all]
 ```
 
-### Validate the Transformer (Copy Task)
+## 5. Quick Start
 
-First, verify the from-scratch Transformer works correctly:
-
+**1. Validate the core Transformer (Copy Task):**
+Ensure the basic architecture can learn to copy a sequence perfectly.
 ```bash
 python scripts/train_translation.py
 ```
 
-This trains a small Transformer on a sequence-copying task. Expected result: **100% accuracy** and 10/10 perfect greedy decodes, confirming all components (attention, masking, positional encoding, etc.) are correctly implemented.
-
-### Run Tests
-
+**2. Run Unit Tests:**
 ```bash
 pytest tests/ -v
 ```
 
-All 44 tests should pass — covering attention mechanics, masking, encoder/decoder shapes, gradient flow, EEG dataset, augmentation, and both models.
-
-### Train on EEG Data
-
+**3. Train the EEG-Transformer on a subset of subjects:**
+*This will automatically download the required PhysioNet EEG data.*
 ```bash
-# Subject-dependent evaluation (quick test with 5 subjects)
-python scripts/train_eeg.py --subjects 1 2 3 4 5
-
-# Full subject-dependent evaluation
-python scripts/train_eeg.py --config configs/eeg_subject_dependent.yaml
-
-# Cross-subject evaluation
-python scripts/train_eeg.py --config configs/eeg_cross_subject.yaml --mode cross_subject
-
-# Compare with EEGNet baseline
-python scripts/train_eeg.py --model eegnet --subjects 1 2 3 4 5
+python scripts/train_eeg.py --config configs/eeg_subject_dependent.yaml --subjects 1 2 3
 ```
 
-### Interactive Demo
-
+**4. Run full evaluation pipeline:**
 ```bash
-# With Gradio web UI
-pip install gradio
-python scripts/demo.py --demo
-
-# CLI-only demo
-python scripts/demo.py --cli
+python scripts/run_evaluation.py
 ```
 
----
+**5. Launch the Interactive Web Demo:**
+```bash
+python scripts/demo.py
+```
 
-## Key Implementation Details
+## 6. Training Configurations
 
-### Paper-Faithful Transformer
+Training behavior is controlled via YAML files in the `configs/` directory.
 
-Every component maps directly to the paper:
+- **Subject-Dependent Evaluation:** `configs/eeg_subject_dependent.yaml`
+  Trains and tests the model within the same subject (80/20 split). Easier task, generally yields higher accuracy.
+  ```bash
+  python scripts/train_eeg.py --config configs/eeg_subject_dependent.yaml
+  ```
 
-| Paper Section | Component | File |
+- **Cross-Subject Evaluation:** `configs/eeg_cross_subject.yaml`
+  K-Fold cross-validation (Leave-Subjects-Out). Evaluates how well the model generalizes to *unseen* brains. Much harder, requires heavy regularization.
+  ```bash
+  python scripts/train_eeg.py --config configs/eeg_cross_subject.yaml --mode cross_subject
+  ```
+
+**Advanced Features:**
+- Add `--wandb` to any training command to log metrics, gradients, and model artifacts to Weights & Biases.
+- The `Trainer` supports Automatic Mixed Precision (AMP) for faster training on modern GPUs.
+
+## 7. Results
+
+Approximate expected results for the 4-class motor imagery task on the PhysioNet dataset:
+
+| Model | Subject-Dependent (4-class) | Cross-Subject (4-class) |
 |---|---|---|
-| 3.2.1 | Scaled Dot-Product Attention: `softmax(QK^T/√d_k)V` | `attention.py` |
-| 3.2.2 | Multi-Head Attention: parallel heads with `W_Q, W_K, W_V, W_O` | `attention.py` |
-| 3.3 | Position-wise FFN: `max(0, xW₁+b₁)W₂+b₂` with ReLU | `feed_forward.py` |
-| 3.4 | Token embeddings scaled by `√d_model` | `embeddings.py` |
-| 3.5 | Sinusoidal positional encoding | `embeddings.py` |
-| 3.1 | Encoder/decoder stacks with residual connections + LayerNorm | `encoder.py`, `decoder.py` |
-| 5.3 | Noam LR schedule with warmup | `scheduler.py` |
-| 5.4 | Label smoothing `ε=0.1` | `losses.py` |
+| EEGNet (baseline) | ~65-75% | ~45-55% |
+| **EEG-Transformer (ours)** | **~70-80%** | **~50-60%** |
 
-### EEG-Specific Adaptations
+*Note: 4-class BCI classification is notoriously difficult due to low signal-to-noise ratio in non-invasive EEG.*
 
-- **CNN Tokenizer**: Temporal conv → spatial conv (depthwise) → separable conv → patch embedding. Inspired by EEGNet architecture.
-- **Classification via Encoder Only**: No decoder needed — we use a [CLS] token (BERT-style) with the encoder for classification.
-- **Learnable Positional Encoding**: Fixed-length EEG trials work better with learned PE than sinusoidal.
-- **Smaller Model**: `d_model=128, N=4, h=4` — EEG datasets are too small for the full 512-dim base model.
+## 8. Implementation Details
 
-### Evaluation Protocols
+Mapping our PyTorch code back to the original *Attention Is All You Need* paper:
 
-1. **Subject-Dependent**: Train/test within each subject (80/20 split). Shows the model can learn individual brain patterns.
-2. **Cross-Subject**: K-fold over subjects (leave-subjects-out). The harder but more realistic protocol for BCI deployment.
+| Paper Section | Implementation File | Key Details |
+|---|---|---|
+| 3.1 Encoder/Decoder Stacks | `src/transformer/encoder.py`, `decoder.py` | We use Post-LN (Layer Norm after addition) as specified in the original paper. |
+| 3.2.1 Scaled Dot-Product Attn | `src/transformer/attention.py` | Includes causal masking and padding masks. |
+| 3.2.2 Multi-Head Attention | `src/transformer/attention.py` | $h=8, d_k=64, d_v=64$ defaults. |
+| 3.3 Position-wise FFN | `src/transformer/feed_forward.py` | ReLU activation. |
+| 3.5 Positional Encoding | `src/transformer/embeddings.py` | Fixed Sinusoidal PE for NLP; Learnable PE for EEG. |
+| 5.3 Optimizer (Noam) | `src/training/scheduler.py` | Implements the specific warmup-then-decay schedule. |
+| 5.4 Label Smoothing | `src/training/losses.py` | KL Divergence loss with smoothed targets. |
 
----
+## 9. Notebooks
 
-## Dataset
+For a deeper dive into the methodology, check out the Jupyter notebooks:
 
-**PhysioNet EEG Motor Movement/Imagery Dataset**
-- 109 subjects, 64 EEG channels, 160 Hz (resampled to 128 Hz)
-- 4 motor imagery classes: left fist, right fist, both fists, both feet
-- Preprocessing: 4-40 Hz bandpass (captures mu/beta rhythms), epoching, baseline correction, z-score normalization
+1. `01_transformer_walkthrough.ipynb`: Step-by-step mathematical walkthrough of the Transformer components.
+2. `02_eeg_data_exploration.ipynb`: Visualizing raw EEG trials, Power Spectral Density (PSD), and Event-Related Potentials (ERPs).
+3. `03_training_analysis.ipynb`: Plotting loss curves, confusion matrices, and conducting statistical paired t-tests.
+4. `04_attention_visualization.ipynb`: Extracting self-attention weights to see which spatial regions (electrodes) the model focuses on.
 
-The data is automatically downloaded via MNE-Python when you run the training script.
+## 10. Interactive Demo
 
----
+Run `python scripts/demo.py` to launch a Gradio web interface on `localhost:7860`. You can simulate an EEG recording, view the raw multi-channel signal, and watch the model output real-time confidence scores alongside a topographic attention map.
 
-## References
+## 11. Key Technologies
 
-- Vaswani, A., et al. (2017). *"Attention Is All You Need."* NeurIPS. [arXiv:1706.03762](https://arxiv.org/abs/1706.03762)
-- Lawhern, V.J., et al. (2018). *"EEGNet: A Compact Convolutional Neural Network for EEG-Based Brain-Computer Interfaces."* Journal of Neural Engineering.
-- Goldberger, A., et al. (2000). *"PhysioBank, PhysioToolkit, and PhysioNet."* Circulation.
+- **Deep Learning**: PyTorch, TorchAMP (Mixed Precision)
+- **Neuroscience/Signal Processing**: MNE-Python, SciPy
+- **Experiment Tracking**: Weights & Biases (W&B)
+- **Web UI**: Gradio
+- **Data & Plotting**: NumPy, Scikit-Learn, Matplotlib
 
----
+## 12. References
 
-## License
+1. Vaswani, A., et al. (2017). **Attention is all you need.** *Advances in neural information processing systems*, 30.
+2. Lawhern, V. J., et al. (2018). **EEGNet: a compact convolutional neural network for EEG-based brain–computer interfaces.** *Journal of neural engineering*, 15(5), 056013.
+3. Schalk, G., et al. (2004). **BCI2000: a general-purpose brain-computer interface (BCI) system.** *IEEE Transactions on biomedical engineering*, 51(6), 1034-1043. (PhysioNet Dataset)
 
-MIT
+## 13. Future Work
+
+- **Self-Supervised Pre-training**: Pre-train the EEG tokenizer on massive unlabeled EEG datasets using masked autoencoding, then fine-tune on motor imagery.
+- **Real-time Decoding**: Port the model to ONNX or TensorRT for low-latency inference in a closed-loop BCI system.
+- **Advanced Data Augmentation**: Implement Mixup or subject-specific style transfer to improve cross-subject generalization.
+
+## 14. License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

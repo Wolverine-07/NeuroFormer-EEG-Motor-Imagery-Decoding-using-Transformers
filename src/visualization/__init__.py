@@ -15,6 +15,8 @@ from src.visualization.eeg_plots import (
     plot_eeg_trial,
     plot_class_averaged_signals,
     plot_psd_comparison,
+    plot_topographic_map,
+    plot_channel_importance,
 )
 
 __all__ = [
@@ -28,4 +30,6 @@ __all__ = [
     "plot_eeg_trial",
     "plot_class_averaged_signals",
     "plot_psd_comparison",
+    "plot_topographic_map",
+    "plot_channel_importance",
 ]
