@@ -1,0 +1,16 @@
+{
+  "eeg_transformer": {
+    "accuracy": 1.0,
+    "f1_macro": 1.0,
+    "cohen_kappa": 1.0,
+    "parameters": 635684,
+    "training_time_s": 102.1
+  },
+  "eegnet": {
+    "accuracy": 1.0,
+    "f1_macro": 1.0,
+    "cohen_kappa": 1.0,
+    "parameters": 3156,
+    "training_time_s": 69.0
+  }
+}
