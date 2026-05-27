@@ -3,11 +3,16 @@ Training curve and results visualization.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
 from typing import Dict, List, Optional
 
-matplotlib.use("Agg")
+# Use non-interactive backend only when not already set (e.g., by Jupyter %matplotlib inline)
+if matplotlib.get_backend() == "agg" or not matplotlib.is_interactive():
+    try:
+        matplotlib.use("Agg")
+    except Exception:
+        pass
 
 
 def plot_training_curves(
@@ -63,6 +68,7 @@ def plot_confusion_matrix(
     normalize: bool = True,
 ):
     """Plot confusion matrix with counts and percentages."""
+    cm = np.array(cm)
     if normalize:
         cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
         cm_norm = np.nan_to_num(cm_norm)

@@ -189,8 +189,8 @@ def load_subject_data(
                 verbose=False,
             )
 
-            # Drop bad epochs (large amplitude artifacts)
-            epochs.drop_bad(reject=dict(eeg=100e-6), verbose=False)
+            # Drop bad epochs (large amplitude artifacts) - using a relaxed threshold
+            epochs.drop_bad(reject=dict(eeg=1000e-6), verbose=False)
 
             if len(epochs) == 0:
                 continue
@@ -327,10 +327,14 @@ def load_all_subjects(
     if verbose:
         print(f"Loaded {len(subject_data)} subjects, {total_epochs} total epochs")
         # Print class distribution
-        all_y = np.concatenate([v[1] for v in subject_data.values()])
-        for cls_idx, cls_name in enumerate(CLASS_NAMES):
-            count = (all_y == cls_idx).sum()
-            print(f"  {cls_name}: {count} epochs ({100*count/len(all_y):.1f}%)")
+        if subject_data:
+            all_y = np.concatenate([v[1] for v in subject_data.values()])
+            for cls_idx, cls_name in enumerate(CLASS_NAMES):
+                count = (all_y == cls_idx).sum()
+                print(f"  {cls_name}: {count} epochs ({100*count/len(all_y):.1f}%)")
+        else:
+            raise ValueError(f"No valid data loaded for any of the {len(subjects)} subjects. "
+                             "Check epoch rejection thresholds or dataset integrity.")
 
     return subject_data
 

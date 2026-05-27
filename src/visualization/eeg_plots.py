@@ -8,11 +8,16 @@ Plots for exploring and understanding the raw EEG data:
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
+import matplotlib.pyplot as plt
 from typing import List, Optional
 
-matplotlib.use("Agg")
+# Use non-interactive backend only when not already set (e.g., by Jupyter %matplotlib inline)
+if matplotlib.get_backend() == "agg" or not matplotlib.is_interactive():
+    try:
+        matplotlib.use("Agg")
+    except Exception:
+        pass
 
 
 def plot_eeg_trial(
