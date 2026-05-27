@@ -45,7 +45,9 @@ neuroformer/
 ├── pyproject.toml
 ├── requirements.txt
 ├── assets/
-│   └── architecture.png
+│   ├── architecture.png         # Model architecture diagram
+│   ├── plots/                   # Generated evaluation plots (e.g. confusion matrix, curves)
+│   └── results/                 # JSON evaluation metric results
 ├── configs/                     # YAML configuration files
 │   ├── transformer_base.yaml
 │   ├── eeg_subject_dependent.yaml
